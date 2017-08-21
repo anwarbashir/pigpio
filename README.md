@@ -1,4 +1,4 @@
-# max301002-raspi
+# max30102-pigpio
 
 This is work in progress!
 
