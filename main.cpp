@@ -89,7 +89,7 @@ n_ir_buffer_length=500; //buffer length of 100 stores 5 seconds of samples runni
     
     
     //calculate heart rate and SpO2 after first 500 samples (first 5 seconds of samples)
-   // maxim_heart_rate_and_oxygen_saturation(aun_ir_buffer, n_ir_buffer_length, aun_red_buffer, &n_sp02, &ch_spo2_valid, &n_heart_rate, &ch_hr_valid); 
+    maxim_heart_rate_and_oxygen_saturation(aun_ir_buffer, n_ir_buffer_length, aun_red_buffer, &n_sp02, &ch_spo2_valid, &n_heart_rate, &ch_hr_valid); 
     
     //Continuously taking samples from MAX30102.  Heart rate and SpO2 are calculated every 1 second
     while(1)
@@ -149,11 +149,47 @@ n_ir_buffer_length=500; //buffer length of 100 stores 5 seconds of samples runni
             printf("SpO2=%i, ", n_sp02);
             printf("SPO2Valid=%i\n\r", ch_spo2_valid);
         }
-        // maxim_heart_rate_and_oxygen_saturation(aun_ir_buffer, n_ir_buffer_length, aun_red_buffer, &n_sp02, &ch_spo2_valid, &n_heart_rate, &ch_hr_valid); 
+         maxim_heart_rate_and_oxygen_saturation(aun_ir_buffer, n_ir_buffer_length, aun_red_buffer, &n_sp02, &ch_spo2_valid, &n_heart_rate, &ch_hr_valid); 
     }
 
-
 }// end main
+
+bool maxim_max30102_reset()
+{
+    if(!maxim_max30102_write_reg(REG_MODE_CONFIG,0x40))
+        return false;
+    else
+        return true;    
+}
+
+bool maxim_max30102_init()
+{
+	printf("I2C Inititialised???\n");
+	if(!i2cWriteByteData(0, REG_INTR_ENABLE_1, 0xc0));		//INTR setting
+		return false;
+	if(!i2cWriteByteData(0, REG_INTR_ENABLE_2, 0x00));
+		return false;
+	if(!i2cWriteByteData(0, REG_FIFO_WR_PTR, 0x00));		//FIFO_WR_PTR[4:0]
+		return false;
+	if(!i2cWriteByteData(0, REG_OVF_COUNTER, 0x00));		//OVF_COUNTER[4:0]
+		return false;
+	if(!i2cWriteByteData(0, REG_FIFO_RD_PTR, 0x00));		//FIFI_RD_PTR[4:0]
+		return false;
+	if(!i2cWriteByteData(0, REG_FIFO_CONFIG, 0x0f));
+		return false;
+	if(!i2cWriteByteData(0, REG_MODE_CONFIG, 0x03));
+		return false;
+	if(!i2cWriteByteData(0, REG_SPO2_CONFIG, 0x27));
+		return false;
+	
+	if(!i2cWriteByteData(0, REG_LED1_PA, 0x24));
+		return false;
+	if(!i2cWriteByteData(0, REG_LED2_PA, 0x24));
+		return false;
+	if(!i2cWriteByteData(0, REG_PILOT_PA, 0x7f));
+		return false;
+	return true;  
+}
 
 bool maxim_max30102_write_reg(unsigned char uch_addr, unsigned char uch_data)
 {
@@ -188,35 +224,6 @@ bool maxim_max30102_read_reg(unsigned char uch_addr, unsigned char *puch_data)
 }
 
 
-bool maxim_max30102_init()
-{
-	printf("I2C Inititialised???\n");
-	if(!i2cWriteByteData(0, REG_INTR_ENABLE_1, 0xc0));		//INTR setting
-		return false;
-	if(!i2cWriteByteData(0, REG_INTR_ENABLE_2, 0x00));
-		return false;
-	if(!i2cWriteByteData(0, REG_FIFO_WR_PTR, 0x00));		//FIFO_WR_PTR[4:0]
-		return false;
-	if(!i2cWriteByteData(0, REG_OVF_COUNTER, 0x00));		//OVF_COUNTER[4:0]
-		return false;
-	if(!i2cWriteByteData(0, REG_FIFO_RD_PTR, 0x00));		//FIFI_RD_PTR[4:0]
-		return false;
-	if(!i2cWriteByteData(0, REG_FIFO_CONFIG, 0x0f));
-		return false;
-	if(!i2cWriteByteData(0, REG_MODE_CONFIG, 0x03));
-		return false;
-	if(!i2cWriteByteData(0, REG_SPO2_CONFIG, 0x27));
-		return false;
-	
-	if(!i2cWriteByteData(0, REG_LED1_PA, 0x24));
-		return false;
-	if(!i2cWriteByteData(0, REG_LED2_PA, 0x24));
-		return false;
-	if(!i2cWriteByteData(0, REG_PILOT_PA, 0x7f));
-		return false;
-	return true;  
-}
-
 bool maxim_max30102_read_fifo(uint32_t *pun_red_led, uint32_t *pun_ir_led)
 {
   uint32_t un_temp;
@@ -234,7 +241,7 @@ bool maxim_max30102_read_fifo(uint32_t *pun_red_led, uint32_t *pun_ir_led)
   if(i2cWriteI2CBlockData(0, I2C_WRITE_ADDR, ach_i2c_data, 1)!=0)
     return false;
   //if(i2c.read(I2C_READ_ADDR, ach_i2c_data, 6, false)!=0)
-  if(i2cReadI2CBlockData(0, I2C_READ_ADDR, ach_i2c_data, 1)!=0)
+  if(i2cReadI2CBlockData(0, I2C_READ_ADDR, ach_i2c_data, 6)!=0)
   {
     return false;
   }
@@ -262,19 +269,7 @@ bool maxim_max30102_read_fifo(uint32_t *pun_red_led, uint32_t *pun_ir_led)
   return true;
 }
 
-
-bool maxim_max30102_reset()
-{
-    if(!maxim_max30102_write_reg(REG_MODE_CONFIG,0x40))
-        return false;
-    else
-        return true;    
-}
-
-
-void maxim_heart_rate_and_oxygen_saturation(unsigned int long *pun_ir_buffer,  int n_ir_buffer_length, 
-			unsigned int long *pun_red_buffer, int *pn_spo2, signed char *pch_spo2_valid, 
-			int *pn_heart_rate, signed char  *pch_hr_valid)
+void maxim_heart_rate_and_oxygen_saturation(unsigned int *pun_ir_buffer,  int n_ir_buffer_length, unsigned int *pun_red_buffer, int *pn_spo2, signed char *pch_spo2_valid, int *pn_heart_rate, signed char  *pch_hr_valid)
 {
     unsigned int un_ir_mean ,un_only_once ;
     int k ,n_i_ratio_count;
@@ -448,8 +443,7 @@ void maxim_heart_rate_and_oxygen_saturation(unsigned int long *pun_ir_buffer,  i
 }
 
 
-void maxim_find_peaks(int *pn_locs, int *pn_npks, int *pn_x, 
-			int n_size, int n_min_height, int n_min_distance, int n_max_num)
+void maxim_find_peaks(int *pn_locs, int *pn_npks, int *pn_x, int n_size, int n_min_height, int n_min_distance, int n_max_num)
 /**
 * \brief        Find peaks
 * \par          Details
