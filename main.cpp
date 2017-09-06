@@ -11,16 +11,14 @@ using namespace std;
 
 #define MAX_BRIGHTNESS 255
 
-//lookup table http://www.raspberry-projects.com/pi/programming-in-c/memory/variables
-
-unsigned int aun_ir_buffer[500]; //IR LED sensor data
-int n_ir_buffer_length;    //data length
-unsigned int aun_red_buffer[500];    //Red LED sensor data
-int n_sp02; //SPO2 value
-signed char ch_spo2_valid;   //indicator to show if the SP02 calculation is valid
-int n_heart_rate;   //heart rate value
-signed char ch_hr_valid;    //indicator to show if the heart rate calculation is valid
-unsigned char uch_dummy;
+uint32_t aun_ir_buffer[500]; //IR LED sensor data
+int32_t n_ir_buffer_length;    //data length
+uint32_t aun_red_buffer[500];    //Red LED sensor data
+int32_t n_sp02; //SPO2 value
+int8_t ch_spo2_valid;   //indicator to show if the SP02 calculation is valid
+int32_t n_heart_rate;   //heart rate value
+int8_t  ch_hr_valid;    //indicator to show if the heart rate calculation is valid
+uint8_t uch_dummy;
 
 int main()
 {
@@ -28,16 +26,15 @@ int main()
 //const int buttonPin = 22;
 //const int intPin = 17;
 
-unsigned int un_min, un_max, un_prev_data;  //variables to calculate the on-board LED brightness that reflects the heartbeats
+uint32_t un_min, un_max, un_prev_data;  //variables to calculate the on-board LED brightness that reflects the heartbeats
 int i;
-int n_brightness;
+int32_t n_brightness;
 float f_temp;
 
 if (gpioInitialise() < 0)
 	printf("pigpio initialisation failed.\n");
 else
 	printf("pigpio initialised okay.\n");
-//gpioWrite(17, 0);
 
 int handle;
 handle = i2cOpen(1, 0x57, 0);
@@ -140,9 +137,7 @@ n_ir_buffer_length=500; //buffer length of 100 stores 5 seconds of samples runni
                 if(n_brightness>MAX_BRIGHTNESS)
                     n_brightness=MAX_BRIGHTNESS;
             }
-#if defined(TARGET_KL25Z) || defined(TARGET_MAX32600MBED)
-            led.write(1-(float)n_brightness/256);
-#endif
+            
             //send samples and calculation result to terminal program through UART
             printf("red=");
             printf("%i", aun_red_buffer[i]);
@@ -166,36 +161,35 @@ bool maxim_max30102_reset()
         return true;    
 }
 
-bool maxim_max30102_init()
-{
-	printf("I2C Inititialised???\n");
-	if(!maxim_max30102_write_reg(REG_INTR_ENABLE_1, 0xc0));		//INTR setting
-		return false;
-	if(!maxim_max30102_write_reg(REG_INTR_ENABLE_2, 0x00));
-		return false;
-	if(!maxim_max30102_write_reg(REG_FIFO_WR_PTR, 0x00));		//FIFO_WR_PTR[4:0]
-		return false;
-	if(!maxim_max30102_write_reg(REG_OVF_COUNTER, 0x00));		//OVF_COUNTER[4:0]
-		return false;
-	if(!maxim_max30102_write_reg(REG_FIFO_RD_PTR, 0x00));		//FIFI_RD_PTR[4:0]
-		return false;
-	if(!maxim_max30102_write_reg(REG_FIFO_CONFIG, 0x0f));
-		return false;
-	if(!maxim_max30102_write_reg(REG_MODE_CONFIG, 0x03));
-		return false;
-	if(!maxim_max30102_write_reg(REG_SPO2_CONFIG, 0x27));
-		return false;
-	
-	if(!maxim_max30102_write_reg(REG_LED1_PA, 0x24));
-		return false;
-	if(!maxim_max30102_write_reg(REG_LED2_PA, 0x24));
-		return false;
-	if(!maxim_max30102_write_reg(REG_PILOT_PA, 0x7f));
-		return false;
-	return true;  
-}
+ bool maxim_max30102_init()
+  {
+   if(!maxim_max30102_write_reg(REG_INTR_ENABLE_1,0xc0)) // INTR setting
+     return false;
+   if(!maxim_max30102_write_reg(REG_INTR_ENABLE_2,0x00))
+     return false;
+   if(!maxim_max30102_write_reg(REG_FIFO_WR_PTR,0x00))  //FIFO_WR_PTR[4:0]
+     return false;
+   if(!maxim_max30102_write_reg(REG_OVF_COUNTER,0x00))  //OVF_COUNTER[4:0]
+     return false;
+   if(!maxim_max30102_write_reg(REG_FIFO_RD_PTR,0x00))  //FIFO_RD_PTR[4:0]
+     return false;
+   if(!maxim_max30102_write_reg(REG_FIFO_CONFIG,0x0f))  //sample avg = 1, fifo rollover=false, fifo almost full = 17
+     return false;
+   if(!maxim_max30102_write_reg(REG_MODE_CONFIG,0x03))   //0x02 for Red only, 0x03 for SpO2 mode 0x07 multimode LED
+     return false;
+   if(!maxim_max30102_write_reg(REG_SPO2_CONFIG,0x27))  // SPO2_ADC range = 4096nA, SPO2 sample rate (100 Hz), LED pulseWidth (400uS)
+     return false;
+   
+   if(!maxim_max30102_write_reg(REG_LED1_PA,0x24))   //Choose value for ~ 7mA for LED1
+     return false;
+   if(!maxim_max30102_write_reg(REG_LED2_PA,0x24))   // Choose value for ~ 7mA for LED2
+     return false;
+   if(!maxim_max30102_write_reg(REG_PILOT_PA,0x7f))   // Choose value for ~ 25mA for Pilot LED
+     return false;
+   return true;  
+ }
 
-bool maxim_max30102_write_reg(unsigned char uch_addr, unsigned char uch_data)
+bool maxim_max30102_write_reg(uint8_t uch_addr, uint8_t uch_data)
 {
   char ach_i2c_data[2];
   ach_i2c_data[0]=uch_addr;
@@ -209,7 +203,7 @@ bool maxim_max30102_write_reg(unsigned char uch_addr, unsigned char uch_data)
     return false;
 }
 
-bool maxim_max30102_read_reg(unsigned char uch_addr, unsigned char *puch_data)
+bool maxim_max30102_read_reg(uint8_t uch_addr, uint8_t *puch_data)
 {
   char ch_i2c_data[32];
   ch_i2c_data[0]=uch_addr;
@@ -280,23 +274,22 @@ bool maxim_max30102_read_fifo(uint32_t *pun_red_led, uint32_t *pun_ir_led)
   return true;
 }
 
-void maxim_heart_rate_and_oxygen_saturation(unsigned int *pun_ir_buffer,  int n_ir_buffer_length, unsigned int *pun_red_buffer, int *pn_spo2, signed char *pch_spo2_valid, int *pn_heart_rate, signed char  *pch_hr_valid)
-{
-    unsigned int un_ir_mean ,un_only_once ;
-    int k ,n_i_ratio_count;
-    int i, s, m, n_exact_ir_valley_locs_count ,n_middle_idx;
-    int n_th1, n_npks,n_c_min;      
-    int an_ir_valley_locs[15] ;
-    int an_exact_ir_valley_locs[15] ;
-    int an_dx_peak_locs[15] ;
-    int n_peak_interval_sum;
+void maxim_heart_rate_and_oxygen_saturation(uint32_t *pun_ir_buffer,  int32_t n_ir_buffer_length, uint32_t *pun_red_buffer, int32_t *pn_spo2, int8_t *pch_spo2_valid, int32_t *pn_heart_rate, int8_t  *pch_hr_valid){
+    uint32_t un_ir_mean ,un_only_once ;
+    int32_t k ,n_i_ratio_count;
+    int32_t i, s, m, n_exact_ir_valley_locs_count ,n_middle_idx;
+    int32_t n_th1, n_npks,n_c_min;      
+    int32_t an_ir_valley_locs[15] ;
+    int32_t an_exact_ir_valley_locs[15] ;
+    int32_t an_dx_peak_locs[15] ;
+    int32_t n_peak_interval_sum;
     
-    int n_y_ac, n_x_ac;
-    int n_spo2_calc; 
-    int n_y_dc_max, n_x_dc_max; 
-    int n_y_dc_max_idx, n_x_dc_max_idx; 
-    int an_ratio[5],n_ratio_average; 
-    int n_nume,  n_denom ;
+    int32_t n_y_ac, n_x_ac;
+    int32_t n_spo2_calc; 
+    int32_t n_y_dc_max, n_x_dc_max; 
+    int32_t n_y_dc_max_idx, n_x_dc_max_idx; 
+    int32_t an_ratio[5],n_ratio_average; 
+    int32_t n_nume,  n_denom ;
     // remove DC of ir signal    
     un_ir_mean =0; 
     for (k=0 ; k<n_ir_buffer_length ; k++ ) un_ir_mean += pun_ir_buffer[k] ;
@@ -454,7 +447,7 @@ void maxim_heart_rate_and_oxygen_saturation(unsigned int *pun_ir_buffer,  int n_
 }
 
 
-void maxim_find_peaks(int *pn_locs, int *pn_npks, int *pn_x, int n_size, int n_min_height, int n_min_distance, int n_max_num)
+void maxim_find_peaks(int32_t *pn_locs, int32_t *pn_npks, int32_t *pn_x, int32_t n_size, int32_t n_min_height, int32_t n_min_distance, int32_t n_max_num)
 /**
 * \brief        Find peaks
 * \par          Details
@@ -500,8 +493,7 @@ void maxim_peaks_above_min_height(int *pn_locs, int *pn_npks, int  *pn_x,
 }
 
 
-void maxim_remove_close_peaks(int *pn_locs, int *pn_npks, 
-			int *pn_x, int n_min_distance)
+void maxim_remove_close_peaks(int32_t *pn_locs, int32_t *pn_npks, int32_t *pn_x, int32_t n_min_distance)
 /**
 * \brief        Remove peaks
 * \par          Details
@@ -511,7 +503,7 @@ void maxim_remove_close_peaks(int *pn_locs, int *pn_npks,
 */
 {
     
-    int i, j, n_old_npks, n_dist;
+    int32_t i, j, n_old_npks, n_dist;
     
     /* Order peaks from large to small */
     maxim_sort_indices_descend( pn_x, pn_locs, *pn_npks );
@@ -530,7 +522,7 @@ void maxim_remove_close_peaks(int *pn_locs, int *pn_npks,
     maxim_sort_ascend( pn_locs, *pn_npks );
 }
 
-void maxim_sort_ascend(int *pn_x,int n_size) 
+void maxim_sort_ascend(int32_t *pn_x,int32_t n_size) 
 /**
 * \brief        Sort array
 * \par          Details
@@ -539,7 +531,7 @@ void maxim_sort_ascend(int *pn_x,int n_size)
 * \retval       None
 */
 {
-    int i, j, n_temp;
+    int32_t i, j, n_temp;
     for (i = 1; i < n_size; i++) {
         n_temp = pn_x[i];
         for (j = i; j > 0 && n_temp < pn_x[j-1]; j--)
@@ -548,7 +540,7 @@ void maxim_sort_ascend(int *pn_x,int n_size)
     }
 }
 
-void maxim_sort_indices_descend(int *pn_x, int *pn_indx, int n_size)
+void maxim_sort_indices_descend(int32_t *pn_x, int32_t *pn_indx, int32_t n_size)
 /**
 * \brief        Sort indices
 * \par          Details
@@ -557,7 +549,7 @@ void maxim_sort_indices_descend(int *pn_x, int *pn_indx, int n_size)
 * \retval       None
 */ 
 {
-    int i, j, n_temp;
+    int32_t i, j, n_temp;
     for (i = 1; i < n_size; i++) {
         n_temp = pn_indx[i];
         for (j = i; j > 0 && pn_x[n_temp] > pn_x[pn_indx[j-1]]; j--)
