@@ -3,8 +3,9 @@
 #include <errno.h>
 #include <pigpio.h>
 
-#include "MAX30102.h"
 #include "algorithm.h"
+#include "MAX30102.h"
+
 
 using namespace std;
 
@@ -40,7 +41,7 @@ else
 
 int handle;
 handle = i2cOpen(1, 0x57, 0);
-printf("%d\n", handle);
+printf("handle: %d\n", handle);
 
 char part;
 //part = i2cReadByteData(0, REG_PART_ID);
@@ -63,6 +64,8 @@ while(gpioRead(22)) {gpioDelay(75);}
 
 maxim_max30102_init();
 
+printf("Init Completed\n");
+
 n_brightness=0;
 un_min=0x3FFFF;
 un_max=0;
@@ -72,7 +75,7 @@ n_ir_buffer_length=500; //buffer length of 100 stores 5 seconds of samples runni
 //read the first 500 samples, and determine the signal range
     for(i=0;i<n_ir_buffer_length;i++)
     {
-        while(gpioRead(17)==1);   //wait until the interrupt pin asserts
+        while(gpioRead(17)==0);   //wait until the interrupt pin asserts
         
         maxim_max30102_read_fifo((aun_red_buffer+i), (aun_ir_buffer+i));  //read from MAX30102 FIFO
             
@@ -86,6 +89,7 @@ n_ir_buffer_length=500; //buffer length of 100 stores 5 seconds of samples runni
         printf("%i\n\r", aun_ir_buffer[i]);
     }
     un_prev_data=aun_red_buffer[i];
+    printf("Here\n");
     
     
     //calculate heart rate and SpO2 after first 500 samples (first 5 seconds of samples)
@@ -115,7 +119,7 @@ n_ir_buffer_length=500; //buffer length of 100 stores 5 seconds of samples runni
         for(i=400;i<500;i++)
         {
             un_prev_data=aun_red_buffer[i-1];
-            while(gpioRead(17)==1);
+            while(gpioRead(17)==0);
             maxim_max30102_read_fifo((aun_red_buffer+i), (aun_ir_buffer+i));
         
             if(aun_red_buffer[i]>un_prev_data)
@@ -165,28 +169,28 @@ bool maxim_max30102_reset()
 bool maxim_max30102_init()
 {
 	printf("I2C Inititialised???\n");
-	if(!i2cWriteByteData(0, REG_INTR_ENABLE_1, 0xc0));		//INTR setting
+	if(!maxim_max30102_write_reg(REG_INTR_ENABLE_1, 0xc0));		//INTR setting
 		return false;
-	if(!i2cWriteByteData(0, REG_INTR_ENABLE_2, 0x00));
+	if(!maxim_max30102_write_reg(REG_INTR_ENABLE_2, 0x00));
 		return false;
-	if(!i2cWriteByteData(0, REG_FIFO_WR_PTR, 0x00));		//FIFO_WR_PTR[4:0]
+	if(!maxim_max30102_write_reg(REG_FIFO_WR_PTR, 0x00));		//FIFO_WR_PTR[4:0]
 		return false;
-	if(!i2cWriteByteData(0, REG_OVF_COUNTER, 0x00));		//OVF_COUNTER[4:0]
+	if(!maxim_max30102_write_reg(REG_OVF_COUNTER, 0x00));		//OVF_COUNTER[4:0]
 		return false;
-	if(!i2cWriteByteData(0, REG_FIFO_RD_PTR, 0x00));		//FIFI_RD_PTR[4:0]
+	if(!maxim_max30102_write_reg(REG_FIFO_RD_PTR, 0x00));		//FIFI_RD_PTR[4:0]
 		return false;
-	if(!i2cWriteByteData(0, REG_FIFO_CONFIG, 0x0f));
+	if(!maxim_max30102_write_reg(REG_FIFO_CONFIG, 0x0f));
 		return false;
-	if(!i2cWriteByteData(0, REG_MODE_CONFIG, 0x03));
+	if(!maxim_max30102_write_reg(REG_MODE_CONFIG, 0x03));
 		return false;
-	if(!i2cWriteByteData(0, REG_SPO2_CONFIG, 0x27));
+	if(!maxim_max30102_write_reg(REG_SPO2_CONFIG, 0x27));
 		return false;
 	
-	if(!i2cWriteByteData(0, REG_LED1_PA, 0x24));
+	if(!maxim_max30102_write_reg(REG_LED1_PA, 0x24));
 		return false;
-	if(!i2cWriteByteData(0, REG_LED2_PA, 0x24));
+	if(!maxim_max30102_write_reg(REG_LED2_PA, 0x24));
 		return false;
-	if(!i2cWriteByteData(0, REG_PILOT_PA, 0x7f));
+	if(!maxim_max30102_write_reg(REG_PILOT_PA, 0x7f));
 		return false;
 	return true;  
 }
@@ -207,16 +211,18 @@ bool maxim_max30102_write_reg(unsigned char uch_addr, unsigned char uch_data)
 
 bool maxim_max30102_read_reg(unsigned char uch_addr, unsigned char *puch_data)
 {
-  char ch_i2c_data;
-  ch_i2c_data=uch_addr;
+  char ch_i2c_data[32];
+  ch_i2c_data[0]=uch_addr;
+  
+  printf("Addr:%d\n", uch_addr);
   
   //if(i2c.write(I2C_WRITE_ADDR, &ch_i2c_data, 1, true)!=0)
-  if(i2cWriteI2CBlockData(0, uch_addr, &ch_i2c_data, 1)!=0)
+  if(i2cWriteI2CBlockData(0, uch_addr, ch_i2c_data, 1)!=0)
     return false;
   //if(i2c.read(I2C_READ_ADDR, &ch_i2c_data, 1, false)==0)
-  if(i2cReadI2CBlockData(0, uch_addr, &ch_i2c_data, 1)==0)
+  if(i2cReadI2CBlockData(0, uch_addr, ch_i2c_data, 1)==1)
   {
-    *puch_data=(unsigned char) ch_i2c_data;
+    *puch_data=(ch_i2c_data[0]); // need to use memcpy instead of equals otherwise will blow-up 
     return true;
   }
   else
@@ -236,15 +242,19 @@ bool maxim_max30102_read_fifo(uint32_t *pun_red_led, uint32_t *pun_ir_led)
   maxim_max30102_read_reg(REG_INTR_STATUS_1, &uch_temp);
   maxim_max30102_read_reg(REG_INTR_STATUS_2, &uch_temp);
   
+  printf("uch %d\n", uch_temp);
   ach_i2c_data[0]=REG_FIFO_DATA;
   //if(i2c.write(I2C_WRITE_ADDR, ach_i2c_data, 1, true)!=0)
   if(i2cWriteI2CBlockData(0, I2C_WRITE_ADDR, ach_i2c_data, 1)!=0)
     return false;
+    printf("first\n");
   //if(i2c.read(I2C_READ_ADDR, ach_i2c_data, 6, false)!=0)
-  if(i2cReadI2CBlockData(0, I2C_READ_ADDR, ach_i2c_data, 6)!=0)
+  if(i2cReadI2CBlockData(0, I2C_READ_ADDR, ach_i2c_data, 6)!=6)
   {
     return false;
   }
+  
+  printf("hek\n");
   un_temp=(unsigned char) ach_i2c_data[0];
   un_temp<<=16;
   *pun_red_led+=un_temp;
@@ -265,6 +275,7 @@ bool maxim_max30102_read_fifo(uint32_t *pun_red_led, uint32_t *pun_ir_led)
   *pun_red_led&=0x03FFFF;  //Mask MSB [23:18]
   *pun_ir_led&=0x03FFFF;  //Mask MSB [23:18]
   
+  printf("%d,%d\n", *pun_red_led, *pun_ir_led);
   
   return true;
 }
