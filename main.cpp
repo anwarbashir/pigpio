@@ -5,7 +5,7 @@
 
 #include "algorithm.h"
 #include "MAX30102.h"
-
+#include "unistd.h"
 
 using namespace std;
 
@@ -19,60 +19,61 @@ int8_t ch_spo2_valid;   //indicator to show if the SP02 calculation is valid
 int32_t n_heart_rate;   //heart rate value
 int8_t  ch_hr_valid;    //indicator to show if the heart rate calculation is valid
 uint8_t uch_dummy;
+int handle;
 
 int main()
 {
 
-//const int buttonPin = 22;
-//const int intPin = 17;
+	uint32_t un_min, un_max, un_prev_data;  //variables to calculate the on-board LED brightness that reflects the heartbeats
+	int i;
+	int32_t n_brightness;
+	float f_temp;
 
-uint32_t un_min, un_max, un_prev_data;  //variables to calculate the on-board LED brightness that reflects the heartbeats
-int i;
-int32_t n_brightness;
-float f_temp;
+	if (gpioInitialise() < 0)
+		printf("pigpio initialisation failed.\n");
+	else
+		printf("pigpio initialised okay.\n");
+    
+    
+	handle = i2cOpen(1, 0x57, 0);
+	printf("handle: %d\n", handle);
+    
+    int count;
+	char part;
+	count = i2cReadI2CBlockData(handle, REG_PART_ID, &part,1);
+	printf("count %d part %#010x\n", count ,part);
+    
+	char rev;
+	count = i2cReadI2CBlockData(handle, REG_REV_ID, &rev,1);
+	printf("count %d  rev %#010x\n", count ,rev);
 
-if (gpioInitialise() < 0)
-	printf("pigpio initialisation failed.\n");
-else
-	printf("pigpio initialised okay.\n");
+	//Main program sequence begins here...
+	if (maxim_max30102_reset())
+	printf("reset Ok\n");
+    
+    //read and clear status register
+    count = i2cReadByteData(handle,REG_INTR_STATUS_1);
+	printf("count %#010x\n",count);  
 
-int handle;
-handle = i2cOpen(1, 0x57, 0);
-printf("handle: %d\n", handle);
 
-char part;
-//part = i2cReadByteData(0, REG_PART_ID);
-i2cReadI2CBlockData(0, REG_PART_ID, &part, 1);
-printf("%#010x\n", part);
+	printf("Press button to begin scan\n");
+	while(gpioRead(22)) {gpioDelay(75);}
 
-char rev;
-//rev = i2cReadByteData(0, REG_REV_ID);
-i2cReadI2CBlockData(0, REG_REV_ID, &rev, 1);
-printf("%#010x\n", rev);
+	if (!maxim_max30102_init())
+		printf("Init faild\n");
+	else
+		printf("Init Completed\n");
 
-//Main program sequence begins here...
-maxim_max30102_reset();
-
-//read and clear status register
-maxim_max30102_read_reg(0, &uch_dummy);
-
-printf("Press button to begin scan\n");
-while(gpioRead(22)) {gpioDelay(75);}
-
-maxim_max30102_init();
-
-printf("Init Completed\n");
-
-n_brightness=0;
-un_min=0x3FFFF;
-un_max=0;
-  
-n_ir_buffer_length=500; //buffer length of 100 stores 5 seconds of samples running at 100sps
+	n_brightness=0;
+	un_min=0x3FFFF;
+	un_max=0;
+ 
+	n_ir_buffer_length=500; //buffer length of 100 stores 5 seconds of samples running at 100sps
 
 //read the first 500 samples, and determine the signal range
     for(i=0;i<n_ir_buffer_length;i++)
     {
-        while(gpioRead(17)==0);   //wait until the interrupt pin asserts
+        while(gpioRead(17)==1);   //wait until the interrupt pin asserts
         
         maxim_max30102_read_fifo((aun_red_buffer+i), (aun_ir_buffer+i));  //read from MAX30102 FIFO
             
@@ -86,9 +87,7 @@ n_ir_buffer_length=500; //buffer length of 100 stores 5 seconds of samples runni
         printf("%i\n\r", aun_ir_buffer[i]);
     }
     un_prev_data=aun_red_buffer[i];
-    printf("Here\n");
-    
-    
+        
     //calculate heart rate and SpO2 after first 500 samples (first 5 seconds of samples)
     maxim_heart_rate_and_oxygen_saturation(aun_ir_buffer, n_ir_buffer_length, aun_red_buffer, &n_sp02, &ch_spo2_valid, &n_heart_rate, &ch_hr_valid); 
     
@@ -149,10 +148,11 @@ n_ir_buffer_length=500; //buffer length of 100 stores 5 seconds of samples runni
             printf("SPO2Valid=%i\n\r", ch_spo2_valid);
         }
          maxim_heart_rate_and_oxygen_saturation(aun_ir_buffer, n_ir_buffer_length, aun_red_buffer, &n_sp02, &ch_spo2_valid, &n_heart_rate, &ch_hr_valid); 
+    //sleep(1000);
     }
 
 }// end main
-
+//---------------------reset--------------------
 bool maxim_max30102_reset()
 {
     if(!maxim_max30102_write_reg(REG_MODE_CONFIG,0x40))
@@ -160,7 +160,15 @@ bool maxim_max30102_reset()
     else
         return true;    
 }
-
+//------------------------write--------------------
+bool maxim_max30102_write_reg(uint8_t uch_addr, uint8_t uch_data)
+{
+	if (i2cWriteByteData(handle,uch_addr,uch_data)==0) 
+		return true;
+	else
+		return false;
+}
+//---------------------init----------------------
  bool maxim_max30102_init()
   {
    if(!maxim_max30102_write_reg(REG_INTR_ENABLE_1,0xc0)) // INTR setting
@@ -179,7 +187,6 @@ bool maxim_max30102_reset()
      return false;
    if(!maxim_max30102_write_reg(REG_SPO2_CONFIG,0x27))  // SPO2_ADC range = 4096nA, SPO2 sample rate (100 Hz), LED pulseWidth (400uS)
      return false;
-   
    if(!maxim_max30102_write_reg(REG_LED1_PA,0x24))   //Choose value for ~ 7mA for LED1
      return false;
    if(!maxim_max30102_write_reg(REG_LED2_PA,0x24))   // Choose value for ~ 7mA for LED2
@@ -189,91 +196,71 @@ bool maxim_max30102_reset()
    return true;  
  }
 
-bool maxim_max30102_write_reg(uint8_t uch_addr, uint8_t uch_data)
-{
-  char ach_i2c_data[2];
-  ach_i2c_data[0]=uch_addr;
-  ach_i2c_data[1]=uch_data;
-  
-  //if(i2c.write(I2C_WRITE_ADDR, ach_i2c_data, 2, false)==0)
-  //if (i2cWriteWordData(0, uch_addr, uch_data)==0)
-  if(i2cWriteI2CBlockData(0, uch_addr, ach_i2c_data, 2)==0)
-    return true;
-  else
-    return false;
-}
-
-bool maxim_max30102_read_reg(uint8_t uch_addr, uint8_t *puch_data)
-{
-  char ch_i2c_data[32];
-  ch_i2c_data[0]=uch_addr;
-  
-  printf("Addr:%d\n", uch_addr);
-  
-  //if(i2c.write(I2C_WRITE_ADDR, &ch_i2c_data, 1, true)!=0)
-  if(i2cWriteI2CBlockData(0, uch_addr, ch_i2c_data, 1)!=0)
-    return false;
-  //if(i2c.read(I2C_READ_ADDR, &ch_i2c_data, 1, false)==0)
-  if(i2cReadI2CBlockData(0, uch_addr, ch_i2c_data, 1)==1)
-  {
-    *puch_data=(ch_i2c_data[0]); // need to use memcpy instead of equals otherwise will blow-up 
-    return true;
-  }
-  else
-    return false;
-}
-
-
+//-------------------read fifo------------------------------
 bool maxim_max30102_read_fifo(uint32_t *pun_red_led, uint32_t *pun_ir_led)
 {
-  uint32_t un_temp;
-  unsigned char uch_temp;
-  *pun_red_led=0;
-  *pun_ir_led=0;
-  char ach_i2c_data[6];
+	uint32_t un_temp;
+    //unsigned char uch_temp;
+    *pun_red_led=0;
+    *pun_ir_led=0;
+    char ach_i2c_data[6];
   
-  //read and clear status register
-  maxim_max30102_read_reg(REG_INTR_STATUS_1, &uch_temp);
-  maxim_max30102_read_reg(REG_INTR_STATUS_2, &uch_temp);
+  	//read and clear status register
+	//maxim_max30102_read_reg(REG_INTR_STATUS_1, &uch_temp);
+	//maxim_max30102_read_reg(REG_INTR_STATUS_2, &uch_temp);
+	//printf("uch %d\n", uch_temp);
+	
+	i2cReadByteData(handle,REG_INTR_STATUS_1);
+	i2cReadByteData(handle,REG_INTR_STATUS_2);
+    
+	//ach_i2c_data[0]=REG_FIFO_DATA;
+	//if(i2c.write(I2C_WRITE_ADDR, ach_i2c_data, 1, true)!=0)
+	     //  return false;
+    //if(i2c.read(I2C_READ_ADDR, ach_i2c_data, 6, false)!=0)
+    
+    i2cReadI2CBlockData(handle, REG_FIFO_DATA ,ach_i2c_data ,6);
   
-  printf("uch %d\n", uch_temp);
-  ach_i2c_data[0]=REG_FIFO_DATA;
-  //if(i2c.write(I2C_WRITE_ADDR, ach_i2c_data, 1, true)!=0)
-  if(i2cWriteI2CBlockData(0, I2C_WRITE_ADDR, ach_i2c_data, 1)!=0)
-    return false;
-    printf("first\n");
-  //if(i2c.read(I2C_READ_ADDR, ach_i2c_data, 6, false)!=0)
-  if(i2cReadI2CBlockData(0, I2C_READ_ADDR, ach_i2c_data, 6)!=6)
-  {
-    return false;
-  }
+	un_temp= (unsigned char) ach_i2c_data[0];
+    un_temp<<=16;
+    *pun_red_led+=un_temp;
+    un_temp= (unsigned char) ach_i2c_data[1];
+    un_temp<<=8;
+    *pun_red_led+=un_temp;
+    un_temp= (unsigned char) ach_i2c_data[2];
+    *pun_red_led+=un_temp;
   
-  printf("hek\n");
-  un_temp=(unsigned char) ach_i2c_data[0];
-  un_temp<<=16;
-  *pun_red_led+=un_temp;
-  un_temp=(unsigned char) ach_i2c_data[1];
-  un_temp<<=8;
-  *pun_red_led+=un_temp;
-  un_temp=(unsigned char) ach_i2c_data[2];
-  *pun_red_led+=un_temp;
-  
-  un_temp=(unsigned char) ach_i2c_data[3];
-  un_temp<<=16;
-  *pun_ir_led+=un_temp;
-  un_temp=(unsigned char) ach_i2c_data[4];
-  un_temp<<=8;
-  *pun_ir_led+=un_temp;
-  un_temp=(unsigned char) ach_i2c_data[5];
-  *pun_ir_led+=un_temp;
-  *pun_red_led&=0x03FFFF;  //Mask MSB [23:18]
-  *pun_ir_led&=0x03FFFF;  //Mask MSB [23:18]
-  
-  printf("%d,%d\n", *pun_red_led, *pun_ir_led);
-  
+    un_temp= (unsigned char) ach_i2c_data[3];
+    un_temp<<=16;
+    *pun_ir_led+=un_temp;
+    un_temp= (unsigned char) ach_i2c_data[4];
+    un_temp<<=8;
+    *pun_ir_led+=un_temp;
+    un_temp= (unsigned char) ach_i2c_data[5];
+    *pun_ir_led+=un_temp;
+    *pun_red_led&=0x03FFFF;  //Mask MSB [23:18]
+    *pun_ir_led&=0x03FFFF;  //Mask MSB [23:18]
+    
   return true;
 }
-
+ //------------------------read----------------------------
+bool maxim_max30102_read_reg(uint8_t uch_addr, uint8_t *puch_data)
+{
+  char ch_i2c_data,ch_i2c_addr;
+  ch_i2c_addr = uch_addr;
+  
+  //printf("Addr:%d\n", uch_addr);
+  
+  //if(i2c.write(I2C_WRITE_ADDR, &ch_i2c_data, 1, true)!=0)
+ 
+  if(i2cReadI2CBlockData(handle, ch_i2c_addr, &ch_i2c_data, 1)==1)
+  {
+    *puch_data = (uint8_t) ch_i2c_data; // need to use memcpy instead of equals otherwise will blow-up 
+    return true;
+  }
+  else
+    return false;
+}
+//------------------------------------------------------------------
 void maxim_heart_rate_and_oxygen_saturation(uint32_t *pun_ir_buffer,  int32_t n_ir_buffer_length, uint32_t *pun_red_buffer, int32_t *pn_spo2, int8_t *pch_spo2_valid, int32_t *pn_heart_rate, int8_t  *pch_hr_valid){
     uint32_t un_ir_mean ,un_only_once ;
     int32_t k ,n_i_ratio_count;
